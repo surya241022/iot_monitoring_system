@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Factory Machine Telemetry Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-2: #1f2937;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --normal: #22c55e;
+      --normal-bg: rgba(34, 197, 94, 0.14);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.16);
+      --critical: #ef4444;
+      --critical-bg: rgba(239, 68, 68, 0.18);
+      --accent: #38bdf8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title-group h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .title-group p {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-top: 2px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--normal);
+      box-shadow: 0 0 8px var(--normal);
+    }
+
+    .dot.paused { background: var(--warning); box-shadow: none; }
+
+    button {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    button:hover { background: #293548; border-color: var(--accent); }
+
+    /* Global alert banner */
+    .alert-banner {
+      display: none;
+      margin-bottom: 20px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      font-size: 0.92rem;
+    }
+
+    .alert-banner.visible { display: flex; align-items: flex-start; gap: 12px; }
+    .alert-banner.WARNING {
+      background: var(--warning-bg);
+      border-color: var(--warning);
+      color: #fde68a;
+    }
+    .alert-banner.CRITICAL {
+      background: var(--critical-bg);
+      border-color: var(--critical);
+      color: #fecaca;
+      animation: pulse-border 1.6s infinite;
+    }
+
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+      50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+
+    .banner-icon { font-size: 1.25rem; line-height: 1.2; }
+    .banner-body strong { display: block; margin-bottom: 3px; }
+    .banner-body ul { margin-left: 18px; font-size: 0.86rem; }
+
+    /* KPI Summary */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .kpi-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; margin-top: 6px; }
+    .kpi-value.normal { color: var(--normal); }
+    .kpi-value.warning { color: var(--warning); }
+    .kpi-value.critical { color: var(--critical); }
+
+    /* Machine Cards Grid */
+    .machines-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .machine-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .machine-card.WARNING {
+      border-color: var(--warning);
+      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
+    }
+
+    .machine-card.CRITICAL {
+      border-color: var(--critical);
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.2);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .machine-name { font-size: 1.08rem; font-weight: 700; }
+    .machine-meta { font-size: 0.76rem; color: var(--muted); }
+
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .badge.NORMAL { background: var(--normal-bg); color: var(--normal); border: 1px solid rgba(34,197,94,0.4); }
+    .badge.WARNING { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245,158,11,0.5); }
+    .badge.CRITICAL { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.6); }
+
+    .metric-row { display: flex; flex-direction: column; gap: 5px; }
+    .metric-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.85rem;
+    }
+    .metric-label { color: var(--muted); }
+    .metric-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metric-val.NORMAL { color: var(--text); }
+    .metric-val.WARNING { color: var(--warning); }
+    .metric-val.CRITICAL { color: var(--critical); }
+
+    .bar-track {
+      height: 7px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+    .bar-fill.NORMAL { background: var(--normal); }
+    .bar-fill.WARNING { background: var(--warning); }
+    .bar-fill.CRITICAL { background: var(--critical); }
+
+    .warnings-box {
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .warnings-box.WARNING { background: var(--warning-bg); color: #fde68a; border-left: 3px solid var(--warning); }
+    .warnings-box.CRITICAL { background: var(--critical-bg); color: #fecaca; border-left: 3px solid var(--critical); }
+    .warnings-box.NORMAL { background: rgba(34,197,94,0.08); color: #bbf7d0; border-left: 3px solid var(--normal); }
+
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--muted);
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+      padding-top: 10px;
+    }
+
+    /* Bottom section: Threshold reference + Alert log */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 960px) {
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .threshold-group {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      margin-bottom: 10px;
+      font-size: 0.83rem;
+    }
+    .threshold-group strong { display: inline-block; margin-bottom: 4px; }
+    .threshold-group.normal strong { color: var(--normal); }
+    .threshold-group.warning strong { color: var(--warning); }
+    .threshold-group.critical strong { color: var(--critical); }
+    .threshold-group ul { margin-left: 16px; color: var(--muted); }
+
+    .alerts-table-wrap {
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+    }
+
+    .empty-state {
+      color: var(--muted);
+      text-align: center;
+      padding: 28px 12px;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title-group">
+        <h1>Factory Machine Telemetry Monitor</h1>
+        <p id="factorySubtitle">FACTORY_001 &bull; Live 5-second sensor stream for 5 machines</p>
+      </div>
+      <div class="controls">
+        <div class="live-pill">
+          <span class="dot" id="liveDot"></span>
+          <span id="liveStatus">Live &bull; next refresh in <strong id="countdown">5</strong>s</span>
+        </div>
+        <button id="toggleBtn" type="button">Pause</button>
+        <button id="refreshBtn" type="button">Refresh Now</button>
+        <a href="/docs" target="_blank" style="text-decoration:none;">
+          <button type="button">API Docs</button>
+        </a>
+      </div>
+    </header>
+
+    <div id="alertBanner" class="alert-banner" role="alert">
+      <div class="banner-icon" id="bannerIcon">!</div>
+      <div class="banner-body">
+        <strong id="bannerTitle">Limit Exceeded</strong>
+        <ul id="bannerList"></ul>
+      </div>
+    </div>
+
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Machines</div>
+        <div class="kpi-value" id="kpiTotal">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Normal</div>
+        <div class="kpi-value normal" id="kpiNormal">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Warning</div>
+        <div class="kpi-value warning" id="kpiWarning">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Critical</div>
+        <div class="kpi-value critical" id="kpiCritical">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Events Generated</div>
+        <div class="kpi-value" id="kpiEvents">-</div>
+      </div>
+    </section>
+
+    <section class="machines-grid" id="machinesGrid"></section>
+
+    <section class="bottom-grid">
+      <div class="panel">
+        <h2>Alert Thresholds</h2>
+        <div class="threshold-group normal">
+          <strong>NORMAL</strong>
+          <ul>
+            <li>Temperature: 45–70 °C</li>
+            <li>Vibration: 1–4 mm/s</li>
+            <li>RPM: 1000–1800 (stable, &Delta; &le; 150)</li>
+          </ul>
+        </div>
+        <div class="threshold-group warning">
+          <strong>WARNING</strong>
+          <ul>
+            <li>Temperature: 70–85 °C</li>
+            <li>Vibration: 4–7 mm/s</li>
+            <li>RPM fluctuations (&Delta; 150–350 or 800–1000 / 1800–2100)</li>
+          </ul>
+        </div>
+        <div class="threshold-group critical">
+          <strong>CRITICAL</strong>
+          <ul>
+            <li>Temperature: 85–110 °C</li>
+            <li>Vibration: 7–12 mm/s</li>
+            <li>Unstable RPM (&Delta; &gt; 350 or &lt; 800 / &gt; 2100)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>
+          <span>Recent Limit Warnings &amp; Critical Alerts</span>
+          <span style="font-size:0.78rem;color:var(--muted);" id="lastUpdated">Updated: -</span>
+        </h2>
+        <div class="alerts-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Machine</th>
+                <th>Level</th>
+                <th>Temp</th>
+                <th>Vib</th>
+                <th>RPM</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="alertsBody">
+              <tr><td colspan="7" class="empty-state">Waiting for telemetry...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const REFRESH_SECONDS = 5;
+    let countdown = REFRESH_SECONDS;
+    let paused = false;
+
+    function clampPct(val, max) {
+      return Math.max(4, Math.min(100, (val / max) * 100));
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function findMetric(metrics, name) {
+      return metrics.find((m) => m.metric === name) || { level: "NORMAL", message: "" };
+    }
+
+    function renderBanner(machines) {
+      const banner = document.getElementById("alertBanner");
+      const title = document.getElementById("bannerTitle");
+      const icon = document.getElementById("bannerIcon");
+      const list = document.getElementById("bannerList");
+
+      const criticals = machines.filter((m) => m.level === "CRITICAL");
+      const warnings = machines.filter((m) => m.level === "WARNING");
+
+      if (criticals.length === 0 && warnings.length === 0) {
+        banner.className = "alert-banner";
+        list.innerHTML = "";
+        return;
+      }
+
+      const severeLevel = criticals.length > 0 ? "CRITICAL" : "WARNING";
+      banner.className = `alert-banner visible ${severeLevel}`;
+      icon.textContent = severeLevel === "CRITICAL" ? "🚨" : "⚠️";
+      title.textContent =
+        severeLevel === "CRITICAL"
+          ? `CRITICAL ALERT: ${criticals.length} machine(s) in critical state, ${warnings.length} in warning state!`
+          : `WARNING: ${warnings.length} machine(s) exceeded normal operating limits.`;
+
+      const items = [...criticals, ...warnings].map(
+        (m) => `<li><strong>${escapeHtml(m.event.machine_id)} [${m.level}]</strong>: ${escapeHtml(m.warnings.join(" | "))}</li>`
+      );
+      list.innerHTML = items.join("");
+    }
+
+    function renderMachines(machines) {
+      const grid = document.getElementById("machinesGrid");
+      grid.innerHTML = machines
+        .map((m) => {
+          const ev = m.event;
+          const tempM = findMetric(m.metrics, "temperature");
+          const vibM = findMetric(m.metrics, "vibration");
+          const rpmM = findMetric(m.metrics, "rpm");
+
+          const tempPct = clampPct(ev.temperature, 115);
+          const vibPct = clampPct(ev.vibration, 12.5);
+          const rpmPct = clampPct(ev.rpm, 2500);
+          const deltaLabel =
+            m.rpm_delta !== null && m.rpm_delta !== undefined
+              ? ` (${m.rpm_delta >= 0 ? "+" : ""}${m.rpm_delta})`
+              : "";
+
+          const warningHtml =
+            m.warnings.length > 0
+              ? m.warnings.map((w) => `<div>&bull; ${escapeHtml(w)}</div>`).join("")
+              : "<div>All parameters within normal limits.</div>";
+
+          return `
+            <article class="machine-card ${m.level}">
+              <div class="card-header">
+                <div>
+                  <div class="machine-name">${escapeHtml(ev.machine_id)}</div>
+                  <div class="machine-meta">${escapeHtml(ev.factory_id)} &bull; Status: ${escapeHtml(ev.status)}</div>
+                </div>
+                <span class="badge ${m.level}">${m.level}</span>
+              </div>
+
+              <div class="metric-row">
+                <div class="metric-top">
+                  <span class="metric-label">Temperature</span>
+                  <span class="metric-val ${tempM.level}">${ev.temperature.toFixed(1)} °C</span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill ${tempM.level}" style="width:${tempPct}%"></div>
+                </div>
+              </div>
+
+              <div class="metric-row">
+                <div class="metric-top">
+                  <span class="metric-label">Vibration</span>
+                  <span class="metric-val ${vibM.level}">${ev.vibration.toFixed(2)} mm/s</span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill ${vibM.level}" style="width:${vibPct}%"></div>
+                </div>
+              </div>
+
+              <div class="metric-row">
+                <div class="metric-top">
+                  <span class="metric-label">RPM</span>
+                  <span class="metric-val ${rpmM.level}">${ev.rpm}${escapeHtml(deltaLabel)}</span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill ${rpmM.level}" style="width:${rpmPct}%"></div>
+                </div>
+              </div>
+
+              <div class="warnings-box ${m.level}">${warningHtml}</div>
+
+              <div class="card-footer">
+                <span>Event: ${escapeHtml(ev.event_id.slice(0, 8))}…</span>
+                <span>${escapeHtml(ev.timestamp)}</span>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    function renderAlerts(alerts) {
+      const tbody = document.getElementById("alertsBody");
+      if (!alerts.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No warnings or critical alerts recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = alerts
+        .slice(0, 25)
+        .map((a) => {
+          const ev = a.event;
+          return `
+            <tr>
+              <td>${escapeHtml(ev.timestamp.replace("T", " ").replace("Z", ""))}</td>
+              <td><strong>${escapeHtml(ev.machine_id)}</strong></td>
+              <td><span class="badge ${a.level}">${a.level}</span></td>
+              <td>${ev.temperature.toFixed(1)}°C</td>
+              <td>${ev.vibration.toFixed(2)}</td>
+              <td>${ev.rpm}</td>
+              <td>${escapeHtml(a.warnings.join("; "))}</td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    async function fetchDashboard() {
+      try {
+        const [monitorRes, alertsRes] = await Promise.all([
+          fetch("/api/v1/monitor"),
+          fetch("/api/v1/alerts?limit=25"),
+        ]);
+        if (!monitorRes.ok || !alertsRes.ok) {
+          throw new Error("API returned non-OK status");
+        }
+        const monitor = await monitorRes.json();
+        const alerts = await alertsRes.json();
+
+        document.getElementById("factorySubtitle").textContent =
+          `${monitor.factory_id} • Live ${monitor.interval_seconds}-second sensor stream for ${monitor.summary.total_machines} machines`;
+        document.getElementById("kpiTotal").textContent = monitor.summary.total_machines;
+        document.getElementById("kpiNormal").textContent = monitor.summary.normal;
+        document.getElementById("kpiWarning").textContent = monitor.summary.warning;
+        document.getElementById("kpiCritical").textContent = monitor.summary.critical;
+        document.getElementById("kpiEvents").textContent = monitor.total_events_generated;
+        document.getElementById("lastUpdated").textContent = `Updated: ${monitor.last_updated || "-"}`;
+
+        renderBanner(monitor.machines);
+        renderMachines(monitor.machines);
+        renderAlerts(alerts);
+      } catch (err) {
+        console.error("Dashboard refresh failed:", err);
+      }
+    }
+
+    document.getElementById("toggleBtn").addEventListener("click", () => {
+      paused = !paused;
+      const btn = document.getElementById("toggleBtn");
+      const dot = document.getElementById("liveDot");
+      const status = document.getElementById("liveStatus");
+      btn.textContent = paused ? "Resume" : "Pause";
+      dot.classList.toggle("paused", paused);
+      status.innerHTML = paused
+        ? "Paused"
+        : `Live &bull; next refresh in <strong id="countdown">${countdown}</strong>s`;
+    });
+
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+      countdown = REFRESH_SECONDS;
+      fetchDashboard();
+    });
+
+    setInterval(() => {
+      if (paused) return;
+      countdown -= 1;
+      if (countdown <= 0) {
+        countdown = REFRESH_SECONDS;
+        fetchDashboard();
+      }
+      const el = document.getElementById("countdown");
+      if (el) el.textContent = countdown;
+    }, 1000);
+
+    fetchDashboard();
+  </script>
+</body>
+</html>

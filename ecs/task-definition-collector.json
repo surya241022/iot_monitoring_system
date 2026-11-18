@@ -1,0 +1,33 @@
+{
+  "family": "factory-telemetry-collector",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/telemetryCollectorS3Role",
+  "containerDefinitions": [
+    {
+      "name": "telemetry-collector",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/factory-telemetry-collector:latest",
+      "essential": true,
+      "environment": [
+        { "name": "API_BASE_URL", "value": "http://<INTERNAL_ALB_OR_SERVICE_DISCOVERY_DNS>:8000" },
+        { "name": "COLLECTOR_INTERVAL_SECONDS", "value": "5" },
+        { "name": "LOCAL_DRY_RUN", "value": "false" },
+        { "name": "AWS_REGION", "value": "<AWS_REGION>" },
+        { "name": "S3_BUCKET_NAME", "value": "<YOUR_S3_BUCKET_NAME>" },
+        { "name": "S3_PREFIX", "value": "telemetry/raw" },
+        { "name": "FACTORY_ID", "value": "FACTORY_001" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/factory-telemetry-collector",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
